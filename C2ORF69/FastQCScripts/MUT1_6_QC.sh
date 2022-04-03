@@ -1,0 +1,1 @@
+fastqc -q -o /home/data/projects/ajaymathuru/X401SC21100117-Z01-F001/FastQC MUT1_6_1.fq.gz MUT1_6_2.fq.gz

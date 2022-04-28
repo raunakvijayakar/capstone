@@ -40,8 +40,8 @@ barplot(colSums(body), ylab="Number of aligned reads", las=2, cex.names=0.8)
 #get matching annotations
 dr.gtf.db <- makeTxDbFromGFF("Danio_rerio.GRCz11.102.chr.gtf", format="gtf")
 ensembl.genes = genes(dr.gtf.db)
-fish = useEnsembl(biomart="ENSEMBL_MART_ENSEMBL", host = "asia.ensembl.org", dataset="drerio_gene_ensembl", version = "102") #change host as needed
-head(listAttributes(fish))#annotations we can request
+fish = useEnsembl(biomart="ENSEMBL_MART_ENSEMBL", host = "https://asia.ensembl.org", dataset="drerio_gene_ensembl", version = "102") #change host as needed
+head(listAttributes(fish)) #annotations we can request
 
 bm.annotations = getBM(attributes=c("ensembl_gene_id", "entrezgene_id", "gene_biotype", "description", "zfin_id_symbol"), mart=fish, filters="ensembl_gene_id", values=ensembl.genes$gene_id, uniqueRows=TRUE)
 
@@ -148,6 +148,9 @@ all_cond = all_cond[!is.na(all_cond$padj),]
 #significance level of 0.01 for FDR. this is a cutoff for the expected false positive rate (proportion of DEGs that were false to total DEGs). since we have a lot of genes, this seems like a reasonable alpha.
 sum(all_cond$padj < 0.01)
 
+hist(all_cond$pvalue)
+
+
 #S_vs_WT
 S_vs_WT = results(nb, contrast=c("condition", "CCSER1_S", "WT"), independentFiltering = TRUE, alpha=0.1, test="Wald")
 hist(S_vs_WT$pvalue) #check this to ensure there isn't batch effect, and that we filtered out the low read genes. Though we can't control for batch in this case.
@@ -205,7 +208,7 @@ venn = GOVenn(m1venn, m2venn, m3venn, label = c("CCSER1_S vs WT", "CCSER1_M vs W
 venn$plot
 
 
-ggsave("body_venn.svg", height = 7, width = 8, units = "in")
+# ggsave("body_venn.svg", height = 7, width = 8, units = "in")
 
 ```
 
@@ -507,7 +510,6 @@ for (i in 1:nclust) {
 #universe = all of the genes, after filtering out rRNA/mtRNA and low expression crap
 #padj = FDR method
 #no pvalue cutoff
-
 }
 #ignore the warning messages
 
@@ -626,9 +628,10 @@ mf5=dotplot(mf[[5]], title = "GO:MF Enrichment of Cluster 5", font.size = 10) + 
 mf1
 mf2
 mf3
-mf4
+# mf4
 mf5
 ```
+
 
 ```{r, eval=F}
 write.csv(mf1$data, "terms_mf1.csv")
@@ -668,7 +671,7 @@ for (i in 1:nclust) {
 
 
 head(kegg[[1]])
-head(kegg[[2]], 10)$ID
+head(kegg[[2]])
 head(kegg[[3]])
 # head(kegg[[4]]) #no enrichment
 head(kegg[[5]])
@@ -817,6 +820,77 @@ topPathwaysDown <- fgseaRes[ES < 0][head(order(padj), n=10), pathway]
 topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
 plotGseaTable(fgsea_sets[topPathways], ensembl_sub_lfc, fgseaRes, gseaParam = 0.5, render = T)
 ```
+
+#### Using enrichplot for GSEA and visualization [WIP]
+```{r}
+library(enrichplot)
+library(DOSE)
+
+changes = S_vs_WT #recall that this is before we got significant_results, but after we cleaned and ran negbinom/wald. premise of gsea is that the individual expression changes needn't be significant, so this is what we want to search within.
+
+ensembl.genes$entrezgene_id[rownames(changes) %in% ensembl.genes$gene_id, ]
+
+
+sum(rownames(changes) %in% ensembl.genes$gene_id)
+
+
+  
+  
+  
+
+ensembl_sub = ensembl.genes[ensembl.genes$entrezgene_id %in% row.names(changes), ] #subset annotation according to overlap
+changes_sub = changes[row.names(changes) %in% ensembl.genes$entrezgene_id, ] #subset change data according to overlap
+sum(ensembl_sub$gene_id == row.names(changes_sub)) #all gene ids identical
+
+ensembl_sub$log2FoldChange = changes_sub$log2FoldChange #get corresponding foldchanges
+
+#create vector of fold changes to be ranked by lfc
+ensembl_sub_lfc = ensembl_sub$log2FoldChange
+names(ensembl_sub_lfc) = ensembl_sub$gene_id
+
+#order by lfc
+ensembl_sub_lfc = ensembl_sub_lfc[order(ensembl_sub_lfc, decreasing = T)]
+#filter for protein coding genes
+ensembl_sub_lfc = ensembl_sub_lfc[names(ensembl_sub_lfc) %in% ensembl_sub$gene_id[ensembl_sub$gene_biotype=="protein_coding"]]
+#run gsea
+
+
+
+
+
+
+
+edo = gseDO(geneList = ensembl_sub_lfc, 
+        minGSSize = 1,
+        maxGSSize = 500,
+        pAdjustMethod = "BH",
+        by = "fgsea")
+
+
+edo2 <- gseDO(geneList)
+
+
+
+
+
+upsetplot(fgseaRes)
+
+
+
+
+data(geneList)
+de <- names(geneList)[abs(geneList) > 2]
+
+edo <- enrichDGN(de)
+fgseaRes
+
+
+
+
+
+
+```
+
 
 
 #### CCSER1_M vs WT
@@ -1336,7 +1410,7 @@ plotGseaTable(fgsea_sets[topPathways], ensembl_sub_lfc, fgseaRes, gseaParam = 0.
 
 ##### Automatic pathway selection (CSSER1_S vs WT)
 ```{r, eval = F}
-library(pathview)
+library(pathview) #BiocManager install
 library(KEGGREST)
 #also need stringr
 
@@ -1378,7 +1452,7 @@ ensembl_sub$log2FoldChange = changes_sub$log2FoldChange #get corresponding foldc
 
 #create vector of fold changes to be ranked by lfc
 ensembl_sub_lfc = ensembl_sub$log2FoldChange
-names(ensembl_sub_lfc) = ensembl_sub$gene_id
+names(ensembl_sub_lfc)= ensembl_sub$gene_id
 
 #order by lfc
 ensembl_sub_lfc = ensembl_sub_lfc[order(ensembl_sub_lfc, decreasing = T)]
@@ -1460,16 +1534,16 @@ Do gene sets have a shared method of regulation?
 ```{r}
 set.seed(123)
 library(rtracklayer)
-library(memes)
-library(BSgenome) #need this, NOT just biostrings to make getseq() work correctly
-check_meme_install() #need local install of memesuite
+library(memes) #BiocManager install
+library(BSgenome) #BiocManager install. need this, NOT just biostrings to make getseq() work correctly
+check_meme_install() #need local install of AME
 
 
 #we can start by reading in the ensembl genome, skipping ucsc entirely
 zfish = readDNAStringSet("Danio_rerio.GRCz11.dna.primary_assembly.fa")
 
 #choose cluster number for motif enrichment#
-k = 2
+k = 1
 
 cluster = names(results.coef.kmeans$cluster[results.coef.kmeans$cluster==k])
 c = ensembl.genes[ensembl.genes$gene_id %in% cluster,]
@@ -1497,7 +1571,7 @@ c_prom = getPromoterSeq(c, zfish, 250, 250)
 bkg_prom = getPromoterSeq(bkg, zfish, 250, 250)
 
 
-ame = runAme(input = c_prom, control = bkg_prom, hit_lo_fraction = 0.5, database = "/Users/raunakvijayakar/Documents/RAUNAK/YNC/2021-2022/Capstone/RNAseq/CCSER1/BODY/JASPAR2020_CORE_vertebrates_non-redundant_pfms_meme.txt")
+ame = runAme(input = c_prom, control = bkg_prom, hit_lo_fraction = 0.5, database = "/Users/asmlabuser1/Desktop/RNASEQ/CCSER1/BODY/JASPAR2020_CORE_vertebrates_non-redundant_pfms_meme.txt")
 
 head(ame)
 
@@ -1629,7 +1703,7 @@ pheatmap(tf_plot, cluster_rows = F, cluster_cols = F, show_rownames = T, breaks 
 ```
 
 
-```{r}
+```{r eval = F}
 #this plot needs to be updated if the data change at all, but it's the only way to get the legend title. Maybe just use for publication figures
 pheatmap(tf_plot, cluster_rows = F, cluster_cols = F, show_rownames = T, breaks = breaksList, color = color, legend = T, main = paste("Cluster",k,"top transcription factor motifs"), legend_breaks = c(0, 5, 10, 15, 20, max(tf_plot)), legend_labels = c("0", "5", "10", "15", "20", "-log10(FDR)\n") )
 
